@@ -1,0 +1,177 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Instascan</title>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    <script type="text/javascript" src="instascan.min.js"></script>
+</head>
+<style>
+.item {
+    width: 100%;
+    height: auto;
+    display: block;
+    position: relative;
+}
+#preview {
+    width: 100%;
+    height: auto;
+}
+.canvas{
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none;
+}
+.scan{
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 300px;
+    height: 300px;
+    margin: auto;
+}
+.scanline{
+    width: 100%;
+    height: 4px;
+    background: green;
+    position: absolute;
+    opacity: 0.6;
+}
+</style>
+<body>
+    <div>
+        <select id="cameraSelect" onchange="cameraChange();"></select>
+    </div>
+    <hr />
+    <div class="item">
+        <video id="preview"></video>
+        <canvas id="canvas" class="canvas"></canvas>
+
+        <div class="scan">
+            <div class="scanline"></div>
+        </div>
+    </div>
+    <script type="text/javascript">
+    let opts = {
+        // Whether to scan continuously for QR codes. If false, use scanner.scan() to manually scan.
+        // If true, the scanner emits the "scan" event when a QR code is scanned. Default true.
+        continuous: true,
+
+        // The HTML element to use for the camera's video preview. Must be a <video> element.
+        // When the camera is active, this element will have the "active" CSS class, otherwise,
+        // it will have the "inactive" class. By default, an invisible element will be created to
+        // host the video.
+        video: document.getElementById('preview'),
+
+        // Whether to horizontally mirror the video preview. This is helpful when trying to
+        // scan a QR code with a user-facing camera. Default true.
+        mirror: false,
+
+        // Whether to include the scanned image data as part of the scan result. See the "scan" event
+        // for image format details. Default false.
+        captureImage: true,
+
+        // Only applies to continuous mode. Whether to actively scan when the tab is not active.
+        // When false, this reduces CPU usage when the tab is not active. Default true.
+        backgroundScan: true,
+
+        // Only applies to continuous mode. The period, in milliseconds, before the same QR code
+        // will be recognized in succession. Default 5000 (5 seconds).
+        refractoryPeriod: 5000,
+
+        // Only applies to continuous mode. The period, in rendered frames, between scans. A lower scan period
+        // increases CPU usage but makes scan response faster. Default 1 (i.e. analyze every frame).
+        scanPeriod: 1
+    };
+
+    let scanner = new Instascan.Scanner(opts);
+    scanner.addListener('scan', function (content) {
+        console.log(content);
+
+        var canvas = document.getElementById('canvas');
+        var ctx = canvas.getContext('2d');
+        var video = document.getElementById('preview');
+        var videoWidth = $(video).css('width').replace(/[^-\d\.]/g, '');
+        var videoHeight = $(video).css('height').replace(/[^-\d\.]/g, '');
+
+        canvas.width  = videoWidth;
+        canvas.height = videoHeight;
+
+        ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+
+        var dataURL = canvas.toDataURL();
+        
+        saveImage(dataURL);
+    });
+
+    Instascan.Camera.getCameras().then(function (cameras) {
+        if (cameras.length > 0) {
+            cameras.forEach(function(element, i) {
+                $('#cameraSelect').append('<option value="' + i + '">' + element.name + '</option>');
+            });
+            scanner.start(cameras[0]);
+            scanRun();
+        } else {
+            console.error('No cameras found.');
+            $('#cameraSelect').append('<option disabled="disabled">No cameras found.</option>');
+        }
+    }).catch(function (e) {
+        console.error(e);
+    });
+
+    function cameraChange() {
+        var index = $('#cameraSelect option:selected').val();
+
+        scanner.stop();
+
+        Instascan.Camera.getCameras().then(function (cameras) {
+            scanner.start(cameras[index]);
+        });
+    }
+
+    function scanRun() {
+        $('.scanline').show();
+
+        scanAction();
+    }
+
+    function scanAction() {
+        var height = $('.scanline').parent().css('height');
+
+        $('.scanline').animate({
+            top: height
+        }, 1500, function() {
+            scanAction2();
+        });
+    }
+
+    function scanAction2() {
+        $('.scanline').animate({
+            top: 0
+        }, 1500, function() {
+            scanAction();
+        });
+    }
+
+    function saveImage(content) {
+        $.ajax({
+            type: 'POST',
+            url: 'saveImage.php',
+            data: { image : content },
+            dataType: 'json',
+            success: function(result) {
+                if (result.msg != 'success') {
+                    console.log(result.msg);
+                } else {
+                    console.log(result.filename);
+                }
+            }
+        });
+    }
+    </script>
+</body>
+</html>
